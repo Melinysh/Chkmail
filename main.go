@@ -19,26 +19,9 @@ func main() {
 	flag.Parse()
 	validateCommandlineFlags()
 	msgS := SetupService()
-	resp, err2 := msgS.List(*emailAddress).Do()
-	if err2 != nil {
-		panic(err2)
-	}
-	messages := resp.Messages
-	ids := []string{}
-	for _, msg := range messages {
-		ids = append(ids, msg.Id)
-		fmt.Println("Message subject ", msg.Header)
-	}
-
-	for _, id := range ids {
-		result, err3 := msgS.Get(*emailAddress, id).Format("full").Do()
-		if err3 != nil {
-			panic(err3)
-		}
-		e, err4 := NewEmailMessage(result)
-		if err4 != nil {
-			panic(err4)
-		}
+	coord := NewGmailCoordinator(msgS)
+	emails := coord.FetchLatestMessages()
+	for _, e := range emails {
 		e.Print()
 	}
 
