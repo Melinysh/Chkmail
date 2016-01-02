@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"google.golang.org/api/gmail/v1"
+	"time"
 )
 
 type EmailMessage struct {
@@ -13,6 +14,7 @@ type EmailMessage struct {
 	To      string
 	From    string
 	Subject string
+	Date    time.Time
 }
 
 func NewEmailMessage(m *gmail.Message) (EmailMessage, error) {
@@ -37,12 +39,14 @@ func NewEmailMessage(m *gmail.Message) (EmailMessage, error) {
 			continue
 		}
 	}
-	return EmailMessage{id, body, to, from, subj}, nil
+	date := time.Unix(m.InternalDate/1000, 0)
+	return EmailMessage{id, body, to, from, subj, date}, nil
 }
 
 func (self EmailMessage) Print() {
 	fmt.Println("To:", self.To)
 	fmt.Println("From:", self.From)
+	fmt.Println(self.Date.Format("Mon Jan _2 15:04:05 2006"))
 	fmt.Println("Subject:", self.Subject)
 	fmt.Println("\n", self.Body)
 }

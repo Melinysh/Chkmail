@@ -20,7 +20,7 @@ func main() {
 	validateCommandlineFlags()
 	msgS := SetupService()
 	coord := NewGmailCoordinator(msgS)
-	emails := coord.FetchLatestMessages()
+	emails := coord.FetchMessages()
 	for _, e := range emails {
 		e.Print()
 	}
