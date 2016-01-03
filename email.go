@@ -4,7 +4,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/jaytaylor/html2text"
 	"google.golang.org/api/gmail/v1"
+	"io/ioutil"
+	"mime/quotedprintable"
+	"strings"
 	"time"
 )
 
@@ -22,7 +26,8 @@ func NewEmailMessage(m *gmail.Message) (EmailMessage, error) {
 	if m.Payload == nil {
 		return EmailMessage{}, errors.New("Email does not have a payload")
 	}
-	body := decode(bodyTextForGmailMessage(m.Payload))
+
+	body := bodyTextForGmailMessage(m.Payload)
 	to := ""
 	from := ""
 	subj := ""
@@ -48,24 +53,55 @@ func (self EmailMessage) Print() {
 	fmt.Println("From:", self.From)
 	fmt.Println(self.Date.Format("Mon Jan _2 15:04:05 2006"))
 	fmt.Println("Subject:", self.Subject)
-	fmt.Println("\n", self.Body)
+	fmt.Println(self.Body)
+}
+
+func (self EmailMessage) ToString() string {
+	msg := "To: " + self.To + "\n"
+	msg += "From: " + self.From + "\n"
+	msg += self.Date.Format("Mon Jan _2 15:04:05 2006") + "\n"
+	msg += "Subject: " + self.Subject + "\n"
+	if *debug {
+		msg += "ID: " + self.Id + "\n"
+	}
+
+	msg += "\n" + self.Body
+	return msg
 }
 
 func bodyTextForGmailMessage(m *gmail.MessagePart) string {
 	body := ""
-	if m.MimeType == "text/plain" {
-		body = m.Body.Data
+	if m.MimeType == "text/plain" || m.MimeType == "text/html" {
+		body = decodeBase64(m.Body.Data)
+		if m.MimeType == "text/html" {
+			body, _ = html2text.FromString(body)
+		}
 	}
 	for _, p := range m.Parts {
 		body += bodyTextForGmailMessage(p)
 	}
+	//	body = strings.Replace(body, "\n", "", -1) // fixes weird spacing in main window
 	return body
 }
 
-func decode(str string) string {
-	data, _ := base64.StdEncoding.DecodeString(str)
-	/*if err != nil {
-		panic(err)
-	}*/
+func decodeQuotePrintable(str string) string {
+	reader := strings.NewReader(str)
+	qR := quotedprintable.NewReader(reader)
+	decoded, err := ioutil.ReadAll(qR)
+	if err != nil {
+		debugPrint("Error decoding quote printable string", err)
+		return ""
+	}
+	debugPrint(string(decoded))
+	return string(decoded[:])
+}
+
+func decodeBase64(str string) string {
+	fmtStr := strings.Replace(strings.Replace(str, "-", "+", -1), "_", "/", -1)
+	data, err := base64.StdEncoding.DecodeString(fmtStr)
+	if err != nil {
+		debugPrint("Error decoding base64", err)
+		return str
+	}
 	return string(data)
 }

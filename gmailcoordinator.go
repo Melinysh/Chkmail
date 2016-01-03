@@ -5,18 +5,19 @@ import (
 )
 
 type GmailCoordinator struct {
+	Publisher
 	msgService      *gmail.UsersMessagesService
 	currentMessages map[string]EmailMessage // maps message ID to email message itself
 	pageToken       string
 }
 
-func NewGmailCoordinator(service *gmail.UsersMessagesService) GmailCoordinator {
-	return GmailCoordinator{service, map[string]EmailMessage{}, ""}
+func NewGmailCoordinatorWithSubscriber(service *gmail.UsersMessagesService, sub Subscriber) GmailCoordinator {
+	return GmailCoordinator{NewPublisherWithSubscriber(sub), service, map[string]EmailMessage{}, ""}
 }
 
-func (self *GmailCoordinator) FetchMessages() []EmailMessage {
+func (self *GmailCoordinator) FetchMessages() {
 	ids := self.messagesIDs()
-	return self.emailsFromIDs(ids)
+	self.emailsFromIDs(ids)
 }
 
 // returns the latest list of message ids and updates self.lastPageToken as required
@@ -38,10 +39,9 @@ func (self *GmailCoordinator) messagesIDs() []string {
 	return messageIDs
 }
 
-func (self *GmailCoordinator) emailsFromIDs(ids []string) []EmailMessage {
-	messages := []EmailMessage{}
+func (self *GmailCoordinator) emailsFromIDs(ids []string) {
 	for _, id := range ids {
-		rawMsg, getErr := self.msgService.Get(*emailAddress, id).Format("full").Do()
+		rawMsg, getErr := self.msgService.Get(*emailAddress, id).Do()
 		if getErr != nil {
 			debugPrint("Error fetching message with id", id, getErr)
 			continue
@@ -51,7 +51,6 @@ func (self *GmailCoordinator) emailsFromIDs(ids []string) []EmailMessage {
 			debugPrint("Error parsing email with id", id, parseErr)
 			continue
 		}
-		messages = append(messages, e)
+		self.Publish(EmailEvent{Recieved, e})
 	}
-	return messages
 }
