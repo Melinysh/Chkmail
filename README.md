@@ -1,7 +1,7 @@
 #Chkmail
 ## A commandline email client written in Golang.
 
-Chkmail allows you to check your email from the comfort of your terminal. Chkmail currently supports Gmail accounts. Chkmail was written by Stephen Melinyshyn.
+Chkmail allows you to check your email from the comfort of your terminal. Chkmail currently supports Gmail accounts. Please note that one project file, `setup.go`, is currently being excluded from this repo because it contains sensitive OAuth info. Chkmail is currently under development and is written by Stephen Melinyshyn.
 
 ## Usage  
 `$ chkmail -email stephen.melinyshyn@gmail.com`
