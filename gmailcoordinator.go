@@ -5,14 +5,52 @@ import (
 )
 
 type GmailCoordinator struct {
-	Publisher
+	EmailPublisher
+	sub             UISubscriber
+	service         *gmail.Service
 	msgService      *gmail.UsersMessagesService
+	draftService    *gmail.UsersDraftsService
+	labelService    *gmail.UsersLabelsService
+	attachService   *gmail.UsersMessagesAttachmentsService
+	threadService   *gmail.UsersThreadsService
 	currentMessages map[string]EmailMessage // maps message ID to email message itself
 	pageToken       string
 }
 
-func NewGmailCoordinatorWithSubscriber(service *gmail.UsersMessagesService, sub Subscriber) GmailCoordinator {
-	return GmailCoordinator{NewPublisherWithSubscriber(sub), service, map[string]EmailMessage{}, ""}
+func NewGmailCoordinator(service *gmail.Service) GmailCoordinator {
+	return GmailCoordinator{
+		NewEmailPublisher(),
+		NewUISubscriber(),
+		service,
+		gmail.NewUsersMessagesService(service),
+		gmail.NewUsersDraftsService(service),
+		gmail.NewUsersLabelsService(service),
+		gmail.NewUsersMessagesAttachmentsService(service),
+		gmail.NewUsersThreadsService(service),
+		map[string]EmailMessage{},
+		""}
+
+}
+
+func NewGmailCoordinatorWithSubscriber(service *gmail.Service, sub EmailSubscriber) GmailCoordinator {
+	gc := NewGmailCoordinator(service)
+	gc.EmailPublisher.AddSubscriber(sub)
+	return gc
+}
+
+func (self *GmailCoordinator) ListenForUIChanges() {
+	go func() {
+		for {
+			event := <-self.sub.uiEvents
+			switch event.Action {
+			case Trash:
+				self.trashMessage(event.Email.Id)
+			default:
+				debugPrint("Unimplemented for action", event.Action)
+			}
+		}
+
+	}()
 }
 
 func (self *GmailCoordinator) FetchMessages() {
@@ -53,4 +91,18 @@ func (self *GmailCoordinator) emailsFromIDs(ids []string) {
 		}
 		self.Publish(EmailEvent{Recieved, e})
 	}
+}
+
+func (self *GmailCoordinator) trashMessage(id string) {
+	msg, err := self.msgService.Trash(*emailAddress, id).Do()
+	if err != nil {
+		debugPrint("Unable to trash email with id", id, err)
+		return
+	}
+	email, parseErr := NewEmailMessage(msg)
+	if parseErr != nil {
+		debugPrint("Unable to parse newly trashed email", parseErr)
+		return
+	}
+	self.Publish(EmailEvent{Trashed, email})
 }

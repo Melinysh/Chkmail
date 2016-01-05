@@ -5,28 +5,59 @@ import (
 	"github.com/jroimartin/gocui"
 )
 
+const (
+	MainViewKey     = "main"
+	FoldersViewKey  = "folders"
+	SubjectsViewKey = "subjects"
+)
+
 type UI struct {
-	Sub      Subscriber
-	gui      *gocui.Gui
-	messages []EmailMessage
-	currPos  int
+	UIPublisher
+	Sub              EmailSubscriber
+	gui              *gocui.Gui
+	mainWindow       *MainWindow
+	subjectsWindow   *SubjectsWindow
+	foldersWindow    *FoldersWindow
+	messages         []EmailMessage
+	currPos          int
+	currFolder       string
+	folderToPos      map[string]int
+	folderToMessages map[string][]EmailMessage
 }
 
 func NewUI() UI {
-	return UI{NewSubscriber(), gocui.NewGui(), []EmailMessage{}, 0}
+	return UI{
+		NewUIPublisher(),
+		NewEmailSubscriber(),
+		gocui.NewGui(),
+		nil,
+		nil,
+		nil,
+		[]EmailMessage{},
+		0,
+		"Inbox",
+		map[string]int{},
+		map[string][]EmailMessage{},
+	}
+}
+
+func NewUIWithSubscriber(sub UISubscriber) UI {
+	ui := NewUI()
+	ui.AddSubscriber(sub)
+	return ui
 }
 
 func (self *UI) Close() {
 	self.gui.Close()
 }
 
-func (self *UI) ListenForChanges() {
+func (self *UI) ListenForEmailChanges() {
 	go func() {
 		for {
 			event := <-self.Sub.emailEvents
 			switch event.Action {
 			case Recieved:
-				self.messages = append(self.messages, event.Email)
+				self.folderToMessages["Inbox"] = append(self.folderToMessages["Inbox"], event.Email)
 				self.refreshUI(self.gui, nil)
 				continue
 			default:
@@ -55,36 +86,41 @@ func (self *UI) quit(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (self *UI) layout(g *gocui.Gui) error {
+
 	maxX, maxY := g.Size()
-	if v, err := g.SetView("side", -1, -1, maxX/4, maxY); err != nil {
+
+	if v, err := g.SetView(FoldersViewKey, -1, -1, maxX/8, maxY); err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
 		}
 		v.Highlight = true
 		v.Editable = false
-		for _, e := range self.messages {
-			fmt.Fprintln(v, e.Subject)
-		}
-		if err := g.SetCurrentView("side"); err != nil {
+		fmt.Fprintln(v, "Inbox")
+		fmt.Fprintln(v, "Trash")
+		fmt.Fprintln(v, "Drafts")
+		fmt.Fprintln(v, "Sent")
+		self.foldersWindow = NewFoldersWindow(v)
+	}
+
+	if v, err := g.SetView(SubjectsViewKey, maxX/8, -1, maxX/4+maxX/8, maxY); err != nil {
+		if err != gocui.ErrorUnkView {
 			return err
 		}
-
+		v.Highlight = true
+		v.Editable = false
+		self.subjectsWindow = NewSubjectsWindow(v)
+		if err := g.SetCurrentView(SubjectsViewKey); err != nil {
+			return err
+		}
 	}
-	if v, err := g.SetView("main", maxX/4, -1, maxX, maxY); err != nil {
+
+	if v, err := g.SetView(MainViewKey, maxX/4+maxX/8, -1, maxX, maxY); err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
 		}
 		v.Editable = false
 		v.Wrap = true
-		if len(self.messages) == 0 {
-			return nil
-		}
-		if len(self.messages) < self.currPos || self.currPos < 0 {
-			panic("currPos is out of order")
-		}
-
-		e := self.messages[self.currPos]
-		fmt.Fprintf(v, "%s", e.ToString())
+		self.mainWindow = NewMainWindow(v)
 	}
 	return nil
 }
@@ -96,112 +132,92 @@ func (self *UI) Loop() {
 	}
 }
 func (self *UI) keybindings(g *gocui.Gui) error {
-	if err := g.SetKeybinding("side", gocui.KeyCtrlSpace, gocui.ModNone, self.nextView); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("main", gocui.KeyCtrlSpace, gocui.ModNone, self.nextView); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, self.nextView); err != nil {
-		return err
-	}
 	if err := g.SetKeybinding("", gocui.KeyArrowDown, gocui.ModNone, self.cursorDown); err != nil {
 		return err
 	}
 	if err := g.SetKeybinding("", gocui.KeyArrowUp, gocui.ModNone, self.cursorUp); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("main", gocui.KeyArrowLeft, gocui.ModNone, self.nextView); err != nil {
+	if err := g.SetKeybinding(MainViewKey, gocui.KeyArrowLeft, gocui.ModNone, self.mainWindow.nextLeftView); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("side", gocui.KeyArrowRight, gocui.ModNone, self.nextView); err != nil {
+	if err := g.SetKeybinding(SubjectsViewKey, gocui.KeyArrowLeft, gocui.ModNone, self.subjectsWindow.nextLeftView); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding(SubjectsViewKey, gocui.KeyArrowRight, gocui.ModNone, self.subjectsWindow.nextRightView); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding(FoldersViewKey, gocui.KeyArrowRight, gocui.ModNone, self.foldersWindow.nextRightView); err != nil {
 		return err
 	}
 	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, self.quit); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("side", gocui.KeyEnter, gocui.ModNone, self.getLine); err != nil {
-		return err
-	}
+
 	if err := g.SetKeybinding("msg", gocui.KeyEnter, gocui.ModNone, self.delMsg); err != nil {
 		return err
 	}
-
 	return nil
 }
 
 func (self *UI) refreshUI(g *gocui.Gui, v *gocui.View) error {
-	main, err := g.View("main")
-	if err != nil {
-		return err
-	}
+	self.messages = self.folderToMessages[self.currFolder]
+	self.subjectsWindow.Clear()
+	self.mainWindow.Clear()
 	if len(self.messages) == 0 {
-		return nil
+		return self.gui.Flush()
 	}
 	if len(self.messages) < self.currPos || self.currPos < 0 {
-		panic("currPos is out of order")
-	}
-	e := self.messages[self.currPos]
-	main.Clear()
-	fmt.Fprintf(main, "%s", e.ToString())
-
-	side, sideErr := g.View("side")
-	if sideErr != nil {
-		return sideErr
-	}
-	side.Clear()
-	for _, e := range self.messages {
-		fmt.Fprintln(side, e.Subject)
+		panic("currPos is out of order" + string(self.currPos) + " msgs: " + string(len(self.messages)))
 	}
 
+	self.mainWindow.SetMessage(self.messages[self.currPos].ToString())
+	self.subjectsWindow.SetSubjects(self.messages)
 	return nil
 }
 
-func (self *UI) nextView(g *gocui.Gui, v *gocui.View) error {
-	if v == nil || v.Name() == "side" {
-		return g.SetCurrentView("main")
-	}
-	return g.SetCurrentView("side")
-}
-
 func (self *UI) cursorDown(g *gocui.Gui, v *gocui.View) error {
-	if self.currPos == len(self.messages)-1 {
-		return nil
-	}
 	if v != nil {
-		cx, cy := v.Cursor()
-		if err := v.SetCursor(cx, cy+1); err != nil {
-			ox, oy := v.Origin()
-			if err := v.SetOrigin(ox, oy+1); err != nil {
-				return err
-			}
-		}
-		if v.Name() == "side" {
+		defer self.refreshUI(g, v)
+		if v.Name() == SubjectsViewKey && self.currPos < len(self.messages)-1 {
 			self.currPos++
-			return self.refreshUI(g, v)
+			return self.subjectsWindow.cursorDown(g, v)
+		} else if v.Name() == FoldersViewKey {
+			err := self.foldersWindow.cursorDown(g, v)
+			self.changeFolders()
+			return err //can be nil, from call above
+		} else if v.Name() == MainViewKey {
+			return self.mainWindow.cursorDown(g, v)
 		}
 	}
 	return nil
 }
 
 func (self *UI) cursorUp(g *gocui.Gui, v *gocui.View) error {
-	if self.currPos == 0 && v.Name() == "side" {
-		return nil
-	}
 	if v != nil {
-		ox, oy := v.Origin()
-		cx, cy := v.Cursor()
-		if err := v.SetCursor(cx, cy-1); err != nil && oy > 0 {
-			if err := v.SetOrigin(ox, oy-1); err != nil {
-				return err
-			}
-		}
-		if v.Name() == "side" {
+		defer self.refreshUI(g, v)
+		if v.Name() == SubjectsViewKey && self.currPos > 0 {
 			self.currPos--
-			return self.refreshUI(g, v)
+			return self.subjectsWindow.cursorUp(g, v)
+		} else if v.Name() == FoldersViewKey {
+			err := self.foldersWindow.cursorUp(g, v)
+			self.changeFolders()
+			return err
+		} else if v.Name() == MainViewKey {
+			return self.mainWindow.cursorUp(g, v)
 		}
+
 	}
 	return nil
+}
+
+func (self *UI) debugMsg(msg string) {
+	maxX, maxY := self.gui.Size()
+	if v, err := self.gui.SetView("msg", maxX/2-30, maxY/2, maxX/2+30, maxY/2+2); err != nil {
+		fmt.Fprintln(v, msg)
+		self.gui.SetCurrentView("msg")
+	}
+
 }
 
 func (self *UI) getLine(g *gocui.Gui, v *gocui.View) error {
@@ -230,8 +246,38 @@ func (self *UI) delMsg(g *gocui.Gui, v *gocui.View) error {
 	if err := g.DeleteView("msg"); err != nil {
 		return err
 	}
-	if err := g.SetCurrentView("side"); err != nil {
+	if err := g.SetCurrentView(SubjectsViewKey); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (self *UI) changeFolders() error {
+	v, err := self.gui.View(FoldersViewKey)
+	if err != nil {
+		debugPrint("Should be folders view", err)
+		panic(err)
+	}
+	_, y := v.Cursor()
+	line, lErr := v.Line(y)
+	if lErr != nil {
+		debugPrint("Unable to get line from folders view", err)
+		self.debugMsg("Unable to get line from folders view" + err.Error())
+		return nil
+		//	panic(err)
+	}
+
+	// save current settings to map
+	self.folderToPos[self.currFolder] = self.currPos
+	self.folderToMessages[self.currFolder] = self.messages
+
+	// fetch last used settings, or to defaults if not found
+	if newPos, ok := self.folderToPos[line]; ok {
+		self.currPos = newPos
+	} else {
+		self.currPos = 0
+	}
+
+	self.currFolder = line
+	return self.refreshUI(self.gui, nil)
 }
