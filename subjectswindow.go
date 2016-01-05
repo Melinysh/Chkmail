@@ -22,7 +22,7 @@ func (self *SubjectsWindow) nextLeftView(g *gocui.Gui, v *gocui.View) error {
 	return g.SetCurrentView(FoldersViewKey)
 }
 
-func (self *SubjectsWindow) cursorUp(g *gocui.Gui, v *gocui.View) error {
+func (self *SubjectsWindow) cursorDown(g *gocui.Gui, v *gocui.View) error {
 	cx, cy := self.Cursor()
 	if err := self.SetCursor(cx, cy+1); err != nil {
 		ox, oy := self.Origin()
@@ -33,7 +33,7 @@ func (self *SubjectsWindow) cursorUp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func (self *SubjectsWindow) cursorDown(g *gocui.Gui, v *gocui.View) error {
+func (self *SubjectsWindow) cursorUp(g *gocui.Gui, v *gocui.View) error {
 	ox, oy := self.Origin()
 	cx, cy := self.Cursor()
 	if err := self.SetCursor(cx, cy-1); err != nil && oy > 0 {

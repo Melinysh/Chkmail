@@ -22,7 +22,7 @@ func (self *MainWindow) SetMessage(msg string) {
 	fmt.Fprintln(self, msg)
 }
 
-func (self *MainWindow) cursorUp(g *gocui.Gui, v *gocui.View) error {
+func (self *MainWindow) cursorDown(g *gocui.Gui, v *gocui.View) error {
 	cx, cy := self.Cursor()
 	if err := self.SetCursor(cx, cy+1); err != nil {
 		ox, oy := self.Origin()
@@ -33,7 +33,7 @@ func (self *MainWindow) cursorUp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func (self *MainWindow) cursorDown(g *gocui.Gui, v *gocui.View) error {
+func (self *MainWindow) cursorUp(g *gocui.Gui, v *gocui.View) error {
 	ox, oy := self.Origin()
 	cx, cy := self.Cursor()
 	if err := self.SetCursor(cx, cy-1); err != nil && oy > 0 {
