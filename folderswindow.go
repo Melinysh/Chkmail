@@ -18,6 +18,9 @@ func (self *FoldersWindow) nextRightView(g *gocui.Gui, v *gocui.View) error {
 
 func (self *FoldersWindow) cursorDown(g *gocui.Gui, v *gocui.View) error {
 	cx, cy := self.Cursor()
+	if cy == 3 {
+		return nil
+	}
 	if err := self.SetCursor(cx, cy+1); err != nil {
 		ox, oy := self.Origin()
 		if err := self.SetOrigin(ox, oy+1); err != nil {
@@ -30,6 +33,9 @@ func (self *FoldersWindow) cursorDown(g *gocui.Gui, v *gocui.View) error {
 func (self *FoldersWindow) cursorUp(g *gocui.Gui, v *gocui.View) error {
 	ox, oy := self.Origin()
 	cx, cy := self.Cursor()
+	if cy == 0 {
+		return nil
+	}
 	if err := self.SetCursor(cx, cy-1); err != nil && oy > 0 {
 		if err := self.SetOrigin(ox, oy-1); err != nil {
 			return err

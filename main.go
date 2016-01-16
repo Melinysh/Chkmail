@@ -13,7 +13,6 @@ var (
 )
 
 func main() {
-	fmt.Println("Let's email!")
 	flag.Parse()
 	validateCommandlineFlags()
 	ui := NewUI()

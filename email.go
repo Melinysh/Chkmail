@@ -19,6 +19,7 @@ type EmailMessage struct {
 	From    string
 	Subject string
 	Date    time.Time
+	Labels  []string
 }
 
 func NewEmailMessage(m *gmail.Message) (EmailMessage, error) {
@@ -26,7 +27,6 @@ func NewEmailMessage(m *gmail.Message) (EmailMessage, error) {
 	if m.Payload == nil {
 		return EmailMessage{}, errors.New("Email does not have a payload")
 	}
-
 	body := bodyTextForGmailMessage(m.Payload)
 	to := ""
 	from := ""
@@ -45,7 +45,8 @@ func NewEmailMessage(m *gmail.Message) (EmailMessage, error) {
 		}
 	}
 	date := time.Unix(m.InternalDate/1000, 0)
-	return EmailMessage{id, body, to, from, subj, date}, nil
+	labels := m.LabelIds
+	return EmailMessage{id, body, to, from, subj, date, labels}, nil
 }
 
 func (self EmailMessage) Print() {
@@ -53,6 +54,13 @@ func (self EmailMessage) Print() {
 	fmt.Println("From:", self.From)
 	fmt.Println(self.Date.Format("Mon Jan _2 15:04:05 2006"))
 	fmt.Println("Subject:", self.Subject)
+	fmt.Print("Labels: ")
+	sep := ""
+	for _, l := range self.Labels {
+		fmt.Print(sep, l)
+		sep = ", "
+	}
+	fmt.Println()
 	fmt.Println(self.Body)
 }
 
@@ -64,8 +72,14 @@ func (self EmailMessage) ToString() string {
 	if *debug {
 		msg += "ID: " + self.Id + "\n"
 	}
-
+	msg += "Labels: "
+	sep := ""
+	for _, l := range self.Labels {
+		msg += sep + l
+		sep = ", "
+	}
 	msg += "\n" + self.Body
+
 	return msg
 }
 

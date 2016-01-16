@@ -74,7 +74,7 @@ func (self *GmailCoordinator) messagesIDs() []string {
 	for _, emptyMsg := range IDList.Messages {
 		messageIDs = append(messageIDs, emptyMsg.Id)
 	}
-	return messageIDs
+	return removeDuplicates(messageIDs)
 }
 
 func (self *GmailCoordinator) emailsFromIDs(ids []string) {
@@ -89,8 +89,29 @@ func (self *GmailCoordinator) emailsFromIDs(ids []string) {
 			debugPrint("Error parsing email with id", id, parseErr)
 			continue
 		}
-		self.Publish(EmailEvent{Recieved, e})
+
+		var action EmailAction = Trashed
+		for _, l := range e.Labels {
+			if l == "SENT" {
+				action = Sent
+			} else if l == "INBOX" {
+				action = Recieved
+			}
+			self.Publish(EmailEvent{action, e})
+		}
 	}
+}
+
+func removeDuplicates(ids []string) []string {
+	cleanmap := map[string]interface{}{}
+	for _, i := range ids {
+		cleanmap[i] = ""
+	}
+	result := []string{}
+	for i := range cleanmap {
+		result = append(result, i)
+	}
+	return result
 }
 
 func (self *GmailCoordinator) trashMessage(id string) {

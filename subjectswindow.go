@@ -44,6 +44,15 @@ func (self *SubjectsWindow) cursorUp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func (self *SubjectsWindow) ResetCursor() error {
+	if err := self.SetCursor(0, 0); err != nil {
+		if err := self.SetOrigin(-1, -1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (self *SubjectsWindow) SetSubjects(msgs []EmailMessage) {
 	var subjects []string
 	for _, m := range msgs {

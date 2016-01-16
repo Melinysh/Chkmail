@@ -58,6 +58,17 @@ func (self *UI) ListenForEmailChanges() {
 			switch event.Action {
 			case Recieved:
 				self.folderToMessages["Inbox"] = append(self.folderToMessages["Inbox"], event.Email)
+				self.messages = append(self.messages, event.Email)
+				self.refreshUI(self.gui, nil)
+				continue
+			case Trashed:
+				self.folderToMessages["Trash"] = append(self.folderToMessages["Trash"], event.Email)
+				self.messages = append(self.messages, event.Email)
+				self.refreshUI(self.gui, nil)
+				continue
+			case Sent:
+				self.folderToMessages["Sent"] = append(self.folderToMessages["Sent"], event.Email)
+				self.messages = append(self.messages, event.Email)
 				self.refreshUI(self.gui, nil)
 				continue
 			default:
@@ -185,6 +196,7 @@ func (self *UI) cursorDown(g *gocui.Gui, v *gocui.View) error {
 		} else if v.Name() == FoldersViewKey {
 			err := self.foldersWindow.cursorDown(g, v)
 			self.changeFolders()
+			self.currPos = 0
 			return err //can be nil, from call above
 		} else if v.Name() == MainViewKey {
 			return self.mainWindow.cursorDown(g, v)
@@ -202,6 +214,7 @@ func (self *UI) cursorUp(g *gocui.Gui, v *gocui.View) error {
 		} else if v.Name() == FoldersViewKey {
 			err := self.foldersWindow.cursorUp(g, v)
 			self.changeFolders()
+			self.currPos = 0
 			return err
 		} else if v.Name() == MainViewKey {
 			return self.mainWindow.cursorUp(g, v)
@@ -261,9 +274,9 @@ func (self *UI) changeFolders() error {
 	_, y := v.Cursor()
 	line, lErr := v.Line(y)
 	if lErr != nil {
-		debugPrint("Unable to get line from folders view", err)
-		self.debugMsg("Unable to get line from folders view" + err.Error())
-		return nil
+		debugPrint("Unable to get line from folders view", lErr)
+		self.debugMsg("Unable to get line from folders view" + lErr.Error())
+		return lErr
 		//	panic(err)
 	}
 
@@ -271,13 +284,12 @@ func (self *UI) changeFolders() error {
 	self.folderToPos[self.currFolder] = self.currPos
 	self.folderToMessages[self.currFolder] = self.messages
 
-	// fetch last used settings, or to defaults if not found
-	if newPos, ok := self.folderToPos[line]; ok {
-		self.currPos = newPos
-	} else {
-		self.currPos = 0
+	self.currPos = 0
+	e := self.subjectsWindow.ResetCursor()
+	if e != nil {
+		self.Close()
+		panic(e)
 	}
-
 	self.currFolder = line
 	return self.refreshUI(self.gui, nil)
 }
