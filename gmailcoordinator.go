@@ -14,7 +14,7 @@ type GmailCoordinator struct {
 	attachService   *gmail.UsersMessagesAttachmentsService
 	threadService   *gmail.UsersThreadsService
 	currentMessages map[string]EmailMessage // maps message ID to email message itself
-	pageToken       string
+	pageTokens      map[string]string
 }
 
 func NewGmailCoordinator(service *gmail.Service) GmailCoordinator {
@@ -28,8 +28,8 @@ func NewGmailCoordinator(service *gmail.Service) GmailCoordinator {
 		gmail.NewUsersMessagesAttachmentsService(service),
 		gmail.NewUsersThreadsService(service),
 		map[string]EmailMessage{},
-		""}
-
+		map[string]string{},
+	}
 }
 
 func NewGmailCoordinatorWithSubscriber(service *gmail.Service, sub EmailSubscriber) GmailCoordinator {
@@ -49,7 +49,6 @@ func (self *GmailCoordinator) ListenForUIChanges() {
 				debugPrint("Unimplemented for action", event.Action)
 			}
 		}
-
 	}()
 }
 
@@ -61,8 +60,8 @@ func (self *GmailCoordinator) FetchMessages() {
 // returns the latest list of message ids and updates self.lastPageToken as required
 func (self *GmailCoordinator) messagesIDs() []string {
 	listCall := self.msgService.List(*emailAddress)
-	if len(self.pageToken) != 0 {
-		listCall.PageToken(self.pageToken)
+	if lastToken, ok := self.pageTokens["messages"]; ok {
+		listCall.PageToken(lastToken)
 	}
 	IDList, err := listCall.Do()
 	var messageIDs []string
@@ -70,11 +69,52 @@ func (self *GmailCoordinator) messagesIDs() []string {
 		debugPrint("Error fetching list of message ids", err)
 		return messageIDs
 	}
-	self.pageToken = IDList.NextPageToken
+	self.pageTokens["messages"] = IDList.NextPageToken
 	for _, emptyMsg := range IDList.Messages {
 		messageIDs = append(messageIDs, emptyMsg.Id)
 	}
 	return removeDuplicates(messageIDs)
+}
+
+func (self *GmailCoordinator) FetchThreads() (threads []Thread) {
+	listCall := self.threadService.List(*emailAddress)
+
+	if lastToken, ok := self.pageTokens["threads"]; ok {
+		listCall.PageToken(lastToken)
+	}
+	IDList, err := listCall.Do()
+
+	if err != nil {
+		debugPrint("Error fetching list of message ids", err)
+		return
+	}
+	self.pageTokens["threads"] = IDList.NextPageToken
+	for _, t := range IDList.Threads {
+		currIds := []string{}
+		for _, msg := range t.Messages {
+			currIds = append(currIds, msg.Id)
+		}
+		emails := self.fetchEmailsForIds(currIds)
+		threads = append(threads, Thread{t.Id, emails})
+	}
+	return
+}
+
+func (self *GmailCoordinator) fetchEmailsForIds(ids []string) (emails []EmailMessage) {
+	for _, id := range ids {
+		rawMsg, getErr := self.msgService.Get(*emailAddress, id).Do()
+		if getErr != nil {
+			debugPrint("Error fetching message with id", id, getErr)
+			continue
+		}
+		e, parseErr := NewEmailMessage(rawMsg)
+		if parseErr != nil {
+			debugPrint("Error parsing email with id", id, parseErr)
+			continue
+		}
+		emails = append(emails, e)
+	}
+	return
 }
 
 func (self *GmailCoordinator) emailsFromIDs(ids []string) {
@@ -126,4 +166,14 @@ func (self *GmailCoordinator) trashMessage(id string) {
 		return
 	}
 	self.Publish(EmailEvent{Trashed, email})
+}
+
+func (self *GmailCoordinator) sendEmail(email EmailMessage) {}
+
+func (self *GmailCoordinator) userProfile() *gmail.Profile {
+	p, err := self.service.Users.GetProfile(*emailAddress).Do()
+	if err != nil {
+		debugPrint("Unable to get user profile for ", *emailAddress, err)
+	}
+	return p
 }

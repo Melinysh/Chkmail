@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+type Thread struct {
+	Id     string
+	Emails []EmailMessage
+}
+
 type EmailMessage struct {
 	Id      string
 	Body    string
