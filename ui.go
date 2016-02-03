@@ -85,7 +85,7 @@ func (self *UI) Init() {
 	}
 	self.gui.SelBgColor = gocui.ColorGreen
 	self.gui.SelFgColor = gocui.ColorBlack
-	self.gui.ShowCursor = true
+	self.gui.Cursor = true
 	self.gui.SetLayout(self.layout)
 	if keyErr := self.keybindings(self.gui); keyErr != nil {
 		panic(keyErr)
@@ -93,7 +93,7 @@ func (self *UI) Init() {
 }
 
 func (self *UI) quit(g *gocui.Gui, v *gocui.View) error {
-	return gocui.Quit
+	return gocui.ErrQuit
 }
 
 func (self *UI) layout(g *gocui.Gui) error {
@@ -101,7 +101,7 @@ func (self *UI) layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
 
 	if v, err := g.SetView(FoldersViewKey, -1, -1, maxX/8, maxY); err != nil {
-		if err != gocui.ErrorUnkView {
+		if err != gocui.ErrUnknownView {
 			return err
 		}
 		v.Highlight = true
@@ -114,7 +114,7 @@ func (self *UI) layout(g *gocui.Gui) error {
 	}
 
 	if v, err := g.SetView(SubjectsViewKey, maxX/8, -1, maxX/4+maxX/8, maxY); err != nil {
-		if err != gocui.ErrorUnkView {
+		if err != gocui.ErrUnknownView {
 			return err
 		}
 		v.Highlight = true
@@ -126,7 +126,7 @@ func (self *UI) layout(g *gocui.Gui) error {
 	}
 
 	if v, err := g.SetView(MainViewKey, maxX/4+maxX/8, -1, maxX, maxY); err != nil {
-		if err != gocui.ErrorUnkView {
+		if err != gocui.ErrUnknownView {
 			return err
 		}
 		v.Editable = false
@@ -138,7 +138,7 @@ func (self *UI) layout(g *gocui.Gui) error {
 
 func (self *UI) Loop() {
 	err := self.gui.MainLoop() // blocks until finished UI (gets an error)
-	if err != nil && err != gocui.Quit {
+	if err != nil && err != gocui.ErrQuit {
 		panic(err)
 	}
 }
@@ -176,7 +176,7 @@ func (self *UI) refreshUI(g *gocui.Gui, v *gocui.View) error {
 	self.subjectsWindow.Clear()
 	self.mainWindow.Clear()
 	if len(self.messages) == 0 {
-		return self.gui.Flush()
+		return nil
 	}
 	if len(self.messages) < self.currPos || self.currPos < 0 {
 		panic("currPos is out of order" + string(self.currPos) + " msgs: " + string(len(self.messages)))
@@ -244,7 +244,7 @@ func (self *UI) getLine(g *gocui.Gui, v *gocui.View) error {
 
 	maxX, maxY := g.Size()
 	if v, err := g.SetView("msg", maxX/2-30, maxY/2, maxX/2+30, maxY/2+2); err != nil {
-		if err != gocui.ErrorUnkView {
+		if err != gocui.ErrUnknownView {
 			return err
 		}
 		fmt.Fprintln(v, l)
